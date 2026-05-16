@@ -1,10 +1,92 @@
 require('dotenv').config();
 const express = require('express'); 
+const mysql = require('mysql2');
 const app = express();
 
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
+// Database Connection Pool
+const db = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10
+});
+
+app.post('api/register', (req, res) => {
+    const { username, ssaid } = req.body;
+
+    if (!ssaid) {
+        return res.status(400).json({ error: 'SSAID is required' });
+    }
+
+    // 1. Check if the device is already in the system
+    const checkSql = "SELECT user_created_at, is_premium FROM users WHERE ssaid = ?";
+
+    db.query(checkSql, [ssaid], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+
+        if (results.length > 0) {
+            // Returning User Logic
+            const user = results[0];
+            const userCreatedTime = new Date(user.user_created_at).getTime();
+            const now = new Date().getTime();
+            const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
+
+            if (user.is_premium) {
+                return res.json({ status: 'active', message: 'Premium Member' });
+            } else if (now - userCreatedTime < twoDaysInMillis) {
+                return res.json({ 
+                    status: 'trial', 
+                    message: 'Trial is active',
+                    remaining: twoDaysInMillis - (now - userCreatedTime) 
+                });
+            } else {
+                return res.json({ status: 'expired', message: 'Trial has ended' });
+            }
+        } else {
+            // 2. New User Logic: Register them and start the clock
+            const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
+            db.query(insertSql, [username || 'Guest', ssaid], (err) => {
+                if (err) return res.status(500).json({ error: 'Failed to register device' });
+                
+                res.status(201).json({ 
+                    status: 'trial', 
+                    message: 'Welcome! Your 2-day trial has started.' 
+                });
+            });
+        }
+    });
+});
+
+app.get('/api/user/:ssaid', (req, res) => {
+    const { ssaid } = req.params;
+
+    if (!ssaid) {
+        return res.status(400).json({ error: 'SSAID parameter is required' });
+    }
+
+    // Query the database for the specific device
+    const sql = "SELECT username, ssaid, user_created_at, is_premium FROM users WHERE ssaid = ?";
+
+    db.query(sql, [ssaid], (err, results) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error', details: err.message });
+        }
+
+        // If no user matches the given SSAID
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Return the exact user data found in the database
+        res.json(results[0]);
+    });
+});
 
 app.get('/', (req, res) => {
     res.send(`
