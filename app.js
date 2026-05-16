@@ -95,7 +95,7 @@ app.get('/', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>PaySay API | KritiCrafts</title>
+            <title>PaySay API | Dedicated to Varsha Sweety ✨</title>
             <style>
                 body { font-family: sans-serif; background: #004d4d; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
                 .card { background: #003333; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; border: 1px solid #ffbf00; }
@@ -113,6 +113,7 @@ app.get('/', (req, res) => {
         </body>
         </html>
     `);
+    res.send(``)
 });
 
 app.listen(PORT, () => {});
