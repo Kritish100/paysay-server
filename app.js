@@ -17,6 +17,8 @@ const db = mysql.createPool({
     connectionLimit: 10
 });
 
+
+// REGISTER USER
 app.post('api/register', (req, res) => {
     const { username, ssaid } = req.body;
 
@@ -25,7 +27,7 @@ app.post('api/register', (req, res) => {
     }
 
     // 1. Check if the device is already in the system
-    const checkSql = "SELECT user_created_at, is_premium FROM users WHERE ssaid = ?";
+    const checkSql = "SELECT user_created_at, status FROM users WHERE ssaid = ?";
 
     db.query(checkSql, [ssaid], (err, results) => {
         if (err) return res.status(500).json({ error: 'Database error' });
@@ -37,9 +39,9 @@ app.post('api/register', (req, res) => {
             const now = new Date().getTime();
             const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
 
-            if (user.is_premium) {
-                return res.json({ status: 'active', message: 'Premium Member' });
-            } else if (now - userCreatedTime < twoDaysInMillis) {
+            if (user.status === 'premium') {
+                return res.json({ status: 'premium', message: 'Premium Member' });
+            } else if (user.status === 'trial') {
                 return res.json({ 
                     status: 'trial', 
                     message: 'Trial is active',
@@ -63,6 +65,38 @@ app.post('api/register', (req, res) => {
     });
 });
 
+
+// UPDATE LAST CHECKED IN TIME
+app.put('/api/ping/:ssaid', (req, res) => {
+    const { ssaid } = req.params;
+
+    if (!ssaid) {
+        return res.status(400).json({ error: 'SSAID parameter is required' });
+    }
+
+    // Force an update to last_check_in by setting it to the current time manually
+    const sql = "UPDATE users SET last_check_in = CURRENT_TIMESTAMP WHERE ssaid = ?";
+
+    db.query(sql, [ssaid], (err, result) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error', details: err.message });
+        }
+
+        // Check if the user actually exists in the database
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Send back a clean acknowledgment
+        res.json({ 
+            success: true, 
+            message: 'Last check-in updated successfully' 
+        });
+    });
+});
+
+
+// GET USER
 app.get('/api/user/:ssaid', (req, res) => {
     const { ssaid } = req.params;
 
@@ -71,7 +105,7 @@ app.get('/api/user/:ssaid', (req, res) => {
     }
 
     // Query the database for the specific device
-    const sql = "SELECT username, ssaid, user_created_at, is_premium FROM users WHERE ssaid = ?";
+    const sql = "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
 
     db.query(sql, [ssaid], (err, results) => {
         if (err) {
@@ -117,3 +151,4 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {});
+
