@@ -17,15 +17,24 @@ const db = mysql.createPool({
     connectionLimit: 10
 });
 
-// API KEY MIDDLEWARE
-// This is to ensure, our API is not publicly accessible
-// Security Middleware: Checks for the secret app key
+// Optional: Initial connection health check logged to stderr if database is down entirely
+db.getConnection((err, connection) => {
+    if (err) {
+        console.error(`[CRITICAL] [DATABASE] Connection pool initialization failed: ${err.message}`);
+    } else {
+        connection.release();
+    }
+});
+
+// SECURITY KEY MIDDLEWARE
+// Checks for the secret app key to ensure our API is not publicly accessible
 const verifyAppKey = (req, res, next) => {
     // Look for the key in headers
     const clientKey = req.headers['x-api-key'];
     const serverKey = process.env.API_SECRET_KEY || 'PaySay_AppKey_2026_KritiCrafts'; // Default key for testing
 
     if (!clientKey || clientKey !== serverKey) {
+        console.error(`[WARN] [${req.method}] ${req.originalUrl} - Unauthorized access attempt. Bad or missing API Key.`);
         return res.status(403).json({ 
             error: 'Forbidden', 
             message: 'Unauthorized client application access.' 
@@ -49,7 +58,10 @@ app.post('/api/register', verifyAppKey, (req, res) => {
     const checkSql = "SELECT user_created_at, status FROM users WHERE ssaid = ?";
 
     db.query(checkSql, [ssaid], (err, results) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
+        if (err) {
+            console.error(`[ERROR] [POST] /api/register - Device check lookup failed for SSAID: ${ssaid}. Details: ${err.message}`);
+            return res.status(500).json({ error: 'Database error' });
+        }
 
         if (results.length > 0) {
             // Returning User Logic
@@ -73,7 +85,10 @@ app.post('/api/register', verifyAppKey, (req, res) => {
             // 2. New User Logic: Register them and start the clock
             const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
             db.query(insertSql, [username || 'Guest', ssaid], (err) => {
-                if (err) return res.status(500).json({ error: 'Failed to register device' });
+                if (err) {
+                    console.error(`[ERROR] [POST] /api/register - Failed to insert new user record for SSAID: ${ssaid}. Details: ${err.message}`);
+                    return res.status(500).json({ error: 'Failed to register device' });
+                }
                 
                 res.status(201).json({ 
                     status: 'trial', 
@@ -85,38 +100,8 @@ app.post('/api/register', verifyAppKey, (req, res) => {
 });
 
 
-// UPDATE LAST CHECKED IN TIME
-app.put('/api/ping/:ssaid', verifyAppKey, (req, res) => {
-    const { ssaid } = req.params;
-
-    if (!ssaid) {
-        return res.status(400).json({ error: 'SSAID parameter is required' });
-    }
-
-    // Force an update to last_check_in by setting it to the current time manually
-    const sql = "UPDATE users SET last_check_in = CURRENT_TIMESTAMP WHERE ssaid = ?";
-
-    db.query(sql, [ssaid], (err, result) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error', details: err.message });
-        }
-
-        // Check if the user actually exists in the database
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Send back a clean acknowledgment
-        res.json({ 
-            success: true, 
-            message: 'Last check-in updated successfully' 
-        });
-    });
-});
-
-
 // GET USER
-app.get('/api/user/:ssaid', verifyAppKey, (req, res) => {
+app.get('/api/ping/:ssaid', verifyAppKey, (req, res) => {
     const { ssaid } = req.params;
 
     if (!ssaid) {
@@ -124,10 +109,13 @@ app.get('/api/user/:ssaid', verifyAppKey, (req, res) => {
     }
 
     // Query the database for the specific device
-    const sql = "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
+    const selectSql = "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
+    // Force an update to last_check_in by setting it to the current time manually
+    const updateSql = "UPDATE users SET last_check_in = CURRENT_TIMESTAMP WHERE ssaid = ?";
 
-    db.query(sql, [ssaid], (err, results) => {
+    db.query(selectSql, [ssaid], (err, results) => {
         if (err) {
+            console.error(`[ERROR] [GET] /api/ping/${ssaid} - Profile selection failed. Details: ${err.message}`);
             return res.status(500).json({ error: 'Database error', details: err.message });
         }
 
@@ -135,9 +123,15 @@ app.get('/api/user/:ssaid', verifyAppKey, (req, res) => {
         if (results.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
-
-        // Return the exact user data found in the database
+        
+        // Send the exact user data found in the database
         res.json(results[0]);
+
+        // Update Last Check In
+        db.query(updateSql, [ssaid], (updateErr) => {
+            console.error(`[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to update last_check_in timestamp. Details: ${updateErr.message}`);
+        });
+
     });
 });
 
