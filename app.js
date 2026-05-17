@@ -106,7 +106,7 @@ app.get('/', (req, res) => {
         </head>
         <body>
             <div class="card">
-                <h1>PaySay API | To Varsha Sweety ✨</h1>
+                <h1>PaySay API</h1>
                 <p><span class="status-dot"></span> Server is Live & Secure</p>
                 <p style="font-size: 0.8rem;">&copy; 2026 KritiCrafts</p>
             </div>
