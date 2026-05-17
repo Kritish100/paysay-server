@@ -23,7 +23,7 @@ const db = mysql.createPool({
 const verifyAppKey = (req, res, next) => {
     // Look for the key in headers
     const clientKey = req.headers['x-api-key'];
-    const serverKey = process.env.API_SECRET_KEY || 'PaySay_Android_App_Key_1234_By_KritiCrafts_2026'; // Default key for testing
+    const serverKey = process.env.API_SECRET_KEY || 'PaySay_AppKey_2026_KritiCrafts'; // Default key for testing
 
     if (!clientKey || clientKey !== serverKey) {
         return res.status(403).json({ 
@@ -168,6 +168,8 @@ app.get('/', (req, res) => {
     `);
     res.send(``)
 });
+
+
 
 app.listen(PORT, () => {});
 
