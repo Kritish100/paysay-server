@@ -19,7 +19,7 @@ const db = mysql.createPool({
 
 
 // REGISTER USER
-app.post('api/register', (req, res) => {
+app.post('/api/register', (req, res) => {
     const { username, ssaid } = req.body;
 
     if (!ssaid) {
