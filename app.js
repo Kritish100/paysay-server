@@ -17,9 +17,28 @@ const db = mysql.createPool({
     connectionLimit: 10
 });
 
+// API KEY MIDDLEWARE
+// This is to ensure, our API is not publicly accessible
+// Security Middleware: Checks for the secret app key
+const verifyAppKey = (req, res, next) => {
+    // Look for the key in headers
+    const clientKey = req.headers['x-api-key'];
+    const serverKey = process.env.API_SECRET_KEY || 'PaySay_Android_App_Key_1234_By_KritiCrafts_2026'; // Default key for testing
+
+    if (!clientKey || clientKey !== serverKey) {
+        return res.status(403).json({ 
+            error: 'Forbidden', 
+            message: 'Unauthorized client application access.' 
+        });
+    }
+
+    // Key is valid! Pass control to the actual API route logic
+    next();
+};
+
 
 // REGISTER USER
-app.post('/api/register', (req, res) => {
+app.post('/api/register', verifyAppKey, (req, res) => {
     const { username, ssaid } = req.body;
 
     if (!ssaid) {
@@ -67,7 +86,7 @@ app.post('/api/register', (req, res) => {
 
 
 // UPDATE LAST CHECKED IN TIME
-app.put('/api/ping/:ssaid', (req, res) => {
+app.put('/api/ping/:ssaid', verifyAppKey, (req, res) => {
     const { ssaid } = req.params;
 
     if (!ssaid) {
@@ -97,7 +116,7 @@ app.put('/api/ping/:ssaid', (req, res) => {
 
 
 // GET USER
-app.get('/api/user/:ssaid', (req, res) => {
+app.get('/api/user/:ssaid', verifyAppKey, (req, res) => {
     const { ssaid } = req.params;
 
     if (!ssaid) {
