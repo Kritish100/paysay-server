@@ -107,11 +107,11 @@ app.get('/api/ping/:ssaid', verifyAppKey, (req, res) => {
 
         // If no user matches the given SSAID
         if (results.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
+            return res.status(200).json({ isRegistered: false, user: null });
         }
         
         // Send the exact user data found in the database
-        res.json(results[0]);
+        res.json({ isRegistered: true, user: results[0] });
 
         // Update Last Check In
         db.query(updateSql, [ssaid], (updateErr) => {
