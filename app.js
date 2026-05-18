@@ -66,21 +66,7 @@ app.post('/api/register', verifyAppKey, (req, res) => {
         if (results.length > 0) {
             // Returning User Logic
             const user = results[0];
-            const userCreatedTime = new Date(user.user_created_at).getTime();
-            const now = new Date().getTime();
-            const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
-
-            if (user.status === 'premium') {
-                return res.json({ status: 'premium', message: 'Premium Member' });
-            } else if (user.status === 'trial') {
-                return res.json({ 
-                    status: 'trial', 
-                    message: 'Trial is active',
-                    remaining: twoDaysInMillis - (now - userCreatedTime) 
-                });
-            } else {
-                return res.json({ status: 'expired', message: 'Trial has ended' });
-            }
+            res.json(user);
         } else {
             // 2. New User Logic: Register them and start the clock
             const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
@@ -100,7 +86,7 @@ app.post('/api/register', verifyAppKey, (req, res) => {
 });
 
 
-// GET USER
+// GET USER PROFILE & UPDATE LAST CHECK IN
 app.get('/api/ping/:ssaid', verifyAppKey, (req, res) => {
     const { ssaid } = req.params;
 
