@@ -102,22 +102,36 @@ app.get('/api/ping/:ssaid', verifyAppKey, (req, res) => {
     db.query(selectSql, [ssaid], (err, results) => {
         if (err) {
             console.error(`[ERROR] [GET] /api/ping/${ssaid} - Profile selection failed. Details: ${err.message}`);
-            return res.status(500).json({ error: 'Database error', details: err.message });
+            return res.status(500).json({ success: false, error: 'Database error', details: err.message });
         }
 
         // If no user matches the given SSAID
         if (results.length === 0) {
-            return res.status(200).json({ isRegistered: false, user: null });
+            return res.status(200).json({ 
+                success: true,
+                isRegistered: false,
+                username: null,
+                user_created_at: null,
+                status: null,
+            });
         }
+
+        // Extract values from the first database row matrix
+        const userData = results[0];
         
         // Send the exact user data found in the database
-        res.json({ isRegistered: true, user: results[0] });
+        res.json({ 
+            success: true,
+            isRegistered: true,
+            username: userData.username,
+            user_created_at: userData.user_created_at,
+            status: userData.status,
+        });
 
         // Update Last Check In
         db.query(updateSql, [ssaid], (updateErr) => {
             console.error(`[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to update last_check_in timestamp. Details: ${updateErr.message}`);
         });
-
     });
 });
 
