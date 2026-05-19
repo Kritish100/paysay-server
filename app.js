@@ -51,7 +51,7 @@ app.post('/api/register', verifyAppKey, (req, res) => {
     const { username, ssaid } = req.body;
 
     if (!ssaid) {
-        return res.status(400).json({ error: 'SSAID is required' });
+        return res.status(400).json({ success: false, error: 'SSAID is required' });
     }
 
     // 1. Check if the device is already in the system
@@ -60,25 +60,35 @@ app.post('/api/register', verifyAppKey, (req, res) => {
     db.query(checkSql, [ssaid], (err, results) => {
         if (err) {
             console.error(`[ERROR] [POST] /api/register - Device check lookup failed for SSAID: ${ssaid}. Details: ${err.message}`);
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ success: false, error: 'Database error' });
         }
 
         if (results.length > 0) {
             // Returning User Logic
+            const existingUser = results[0];
             const user = results[0];
-            res.json(user);
+            return res.json({
+                success: true,
+                isRegistered: true,
+                username: existingUser.username,
+                user_created_at: existingUser.user_created_at,
+                status: existingUser.status
+            });
         } else {
             // 2. New User Logic: Register them and start the clock
             const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
             db.query(insertSql, [username || 'Guest', ssaid], (err) => {
                 if (err) {
                     console.error(`[ERROR] [POST] /api/register - Failed to insert new user record for SSAID: ${ssaid}. Details: ${err.message}`);
-                    return res.status(500).json({ error: 'Failed to register device' });
+                    return res.status(500).json({ success: false, error: 'Failed to register device' });
                 }
                 
                 res.status(201).json({ 
-                    status: 'trial', 
-                    message: 'Welcome! Your 2-day trial has started.' 
+                    success: true,
+                    isRegistered: true,
+                    username: username || 'Guest',
+                    user_created_at: new Date().toISOString().split('T')[0], // Approximation
+                    status: 'trial'
                 });
             });
         }
