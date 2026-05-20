@@ -1,5 +1,6 @@
 require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express'); 
+const crypto = require('crypto');
 const mysql = require('mysql2');
 const app = express();
 
@@ -76,9 +77,14 @@ app.post('/api/register/:ssaid', verifyAppKey, (req, res) => {
                 status: existingUser.status
             });
         } else {
-            // 2. New User Logic: Register them and start the clock
+            // 2. New User Logic: Generate a short unique ID for the Guest username
+            // Generates 2 random bytes which convert into a clean 4-character hex string (e.g., "7f3d")
+            const uniqueId = crypto.randomBytes(2).toString('hex').toUpperCase();
+            const finalUsername = `Guest_${uniqueId}`; // Becomes "Guest_4A9F"
+
+
             const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
-            db.query(insertSql, [username || 'Guest', ssaid], (err) => {
+            db.query(insertSql, [finalUsername, ssaid], (err) => {
                 if (err) {
                     console.error(`[ERROR] [POST] /api/register - Failed to insert new user record for SSAID: ${ssaid}. Details: ${err.message}`);
                     return res.status(500).json({ success: false, error: 'Failed to register device' });
@@ -87,7 +93,7 @@ app.post('/api/register/:ssaid', verifyAppKey, (req, res) => {
                 res.status(201).json({ 
                     success: true,
                     isRegistered: true,
-                    username: username || 'Guest',
+                    username: finalUsername,
                     user_created_at: new Date().toISOString().split('T')[0], // Approximation
                     status: 'trial'
                 });
