@@ -60,7 +60,7 @@ const verifyAppKey = (req, res, next) => {
 // REGISTER USER
 app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
   const { ssaid } = req.params;
-  const { username } = req.query;
+  const { username } = req.body;
 
   if (!ssaid) {
     return res.status(400).json({ success: false, error: "SSAID is required" });
