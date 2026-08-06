@@ -30,6 +30,16 @@ db.getConnection((err, connection) => {
   }
 });
 
+// Helper function to format current date to Nepal Time (YYYY-MM-DD HH:mm:ss)
+const getNepalDateTime = () => {
+  const now = new Date();
+  // Offset for UTC+5:45 in milliseconds
+  const nepalOffset = (5 * 60 + 45) * 60 * 1000;
+  const nepalTime = new Date(now.getTime() + nepalOffset);
+
+  return nepalTime.toISOString().slice(0, 19).replace("T", " ");
+};
+
 // SECURITY KEY MIDDLEWARE
 const verifyAppKey = (req, res, next) => {
   const clientKey = req.headers["x-api-key"];
@@ -84,9 +94,11 @@ app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
       const baseName = username ? username.trim() : "Guest";
       const finalUsername = `${baseName}_${uniqueId}`;
 
-      const insertSql = "INSERT INTO users (username, ssaid) VALUES (?, ?)";
+      const insertSql =
+        "INSERT INTO users (username, ssaid, user_created_at) VALUES (?, ?, ?)";
+      const currentTime = getNepalDateTime();
 
-      db.query(insertSql, [finalUsername, ssaid], (err) => {
+      db.query(insertSql, [finalUsername, ssaid, currentTime], (err) => {
         if (err) {
           console.error(
             `[ERROR] [POST] /api/register - Insert failed: ${err.message}`,
@@ -131,8 +143,8 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
 
   const selectSql =
     "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
-  const updateSql =
-    "UPDATE users SET last_check_in = CURRENT_TIMESTAMP WHERE ssaid = ?";
+  // Pass explicit JavaScript timestamp parameter instead of SQL CURRENT_TIMESTAMP
+  const updateSql = "UPDATE users SET last_check_in = ? WHERE ssaid = ?";
 
   db.query(selectSql, [ssaid], (err, results) => {
     if (err) {
@@ -163,8 +175,10 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
       status: userData.status,
     });
 
-    // FIXED: Safely log background query errors
-    db.query(updateSql, [ssaid], (updateErr) => {
+    // Safely log background query errors
+    // Update last_check_in using explicit JS time string
+    const currentTime = getNepalDateTime();
+    db.query(updateSql, [currentTime, ssaid], (updateErr) => {
       if (updateErr) {
         console.error(
           `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to update check-in: ${updateErr.message}`,
