@@ -144,7 +144,8 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
   const selectSql =
     "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
   // Pass explicit JavaScript timestamp parameter instead of SQL CURRENT_TIMESTAMP
-  const updateSql = "UPDATE users SET last_check_in = ? WHERE ssaid = ?";
+  const updateSql =
+    "UPDATE users SET last_check_in = ?, ping_count = ping_count + 1 WHERE ssaid = ?";
 
   db.query(selectSql, [ssaid], (err, results) => {
     if (err) {
