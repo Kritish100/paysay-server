@@ -148,7 +148,8 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
     "UPDATE users SET last_check_in = ?, ping_count = ping_count + 1 WHERE ssaid = ?";
 
   // Insert query to record individual check-in history
-  const historySql = "INSERT INTO check_ins (ssaid, check_in_at) VALUES (?, ?)";
+  const historySql =
+    "INSERT INTO check_ins (ssaid, username, check_in_at) VALUES (?, ?, ?)";
 
   db.query(selectSql, [ssaid], (err, results) => {
     if (err) {
@@ -191,13 +192,17 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
     });
 
     // 2. Insert new check-in timestamp record into history table
-    db.query(historySql, [ssaid, currentTime], (historyErr) => {
-      if (historyErr) {
-        console.error(
-          `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to log check-in history: ${historyErr.message}`,
-        );
-      }
-    });
+    db.query(
+      historySql,
+      [ssaid, userData.username, currentTime],
+      (historyErr) => {
+        if (historyErr) {
+          console.error(
+            `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to log check-in history: ${historyErr.message}`,
+          );
+        }
+      },
+    );
   });
 });
 
