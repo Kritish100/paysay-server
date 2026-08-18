@@ -147,9 +147,17 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
   const updateSql =
     "UPDATE users SET last_check_in = ?, ping_count = ping_count + 1 WHERE ssaid = ?";
 
-  // Insert query to record individual check-in history
-  const historySql =
-    "INSERT INTO check_ins (ssaid, username, check_in_at) VALUES (?, ?, ?)";
+  // !! TO BE DELETED Insert query to record individual check-in history
+  // const historySql =
+  //   "INSERT INTO check_ins (ssaid, username, check_in_at) VALUES (?, ?, ?)";
+
+  const dailyPingSql = `
+  INSERT INTO daily_pings (ssaid, username, ping_date, ping_count)
+  VALUES (?, ?, ?, 1)
+  ON DUPLICATE KEY UPDATE 
+    ping_count = ping_count + 1,
+    username = VALUES(username);
+`;
 
   db.query(selectSql, [ssaid], (err, results) => {
     if (err) {
@@ -191,14 +199,28 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
       }
     });
 
+    // !! TO BE DELETED Insert query to record daily ping count
     // 2. Insert new check-in timestamp record into history table
+    // db.query(
+    //   historySql,
+    //   [ssaid, userData.username, currentTime],
+    //   (historyErr) => {
+    //     if (historyErr) {
+    //       console.error(
+    //         `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to log check-in history: ${historyErr.message}`,
+    //       );
+    //     }
+    //   },
+    // );
+
+    const pingDateOnly = currentTime.split(" ")[0];
     db.query(
-      historySql,
-      [ssaid, userData.username, currentTime],
-      (historyErr) => {
-        if (historyErr) {
+      dailyPingSql,
+      [ssaid, userData.username, pingDateOnly],
+      (dailyErr) => {
+        if (dailyErr) {
           console.error(
-            `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to log check-in history: ${historyErr.message}`,
+            `[ERROR] Failed to record daily ping: ${dailyErr.message}`,
           );
         }
       },
