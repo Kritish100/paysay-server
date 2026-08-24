@@ -1,75 +1,31 @@
 require("dotenv").config({ path: __dirname + "/.env" });
 const express = require("express");
 const crypto = require("crypto");
-const mysql = require("mysql2");
-
 const app = express();
-app.use(express.json());
 
+// 1. Import your modularized dependencies
+const db = require("./db");
+const { getNepalDateTime } = require("./utils");
+const { verifyAppKey } = require("./middleware");
+const teamRoutes = require("./teams");
+
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
-// Database Connection Pool
-const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  timezone: "+05:45",
-});
-
-// Initial connection health check
-db.getConnection((err, connection) => {
-  if (err) {
-    console.error(
-      `[CRITICAL] [DATABASE] Connection pool initialization failed: ${err.message}`,
-    );
-  } else {
-    connection.release();
-  }
-});
-
-// Helper function to format current date to Nepal Time (YYYY-MM-DD HH:mm:ss)
-const getNepalDateTime = () => {
-  const now = new Date();
-  // Offset for UTC+5:45 in milliseconds
-  const nepalOffset = (5 * 60 + 45) * 60 * 1000;
-  const nepalTime = new Date(now.getTime() + nepalOffset);
-
-  return nepalTime.toISOString().slice(0, 19).replace("T", " ");
-};
-
-// SECURITY KEY MIDDLEWARE
-const verifyAppKey = (req, res, next) => {
-  const clientKey = req.headers["x-api-key"];
-  const serverKey = process.env.API_SECRET_KEY || "PaySay_API_KEY";
-
-  if (!clientKey || clientKey !== serverKey) {
-    console.error(
-      `[WARN] [${req.method}] ${req.originalUrl} - Unauthorized access attempt.`,
-    );
-    return res.status(403).json({
-      error: "Forbidden",
-      message: "Unauthorized client application access.",
-    });
-  }
-  next();
-};
+// 2. Mount the Teams Router
+// Every request starting with /api/team will now be handled by teams.js
+app.use("/api/team", teamRoutes);
 
 // REGISTER USER
 app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
   const { ssaid } = req.params;
   const { username } = req.body;
-
   if (!ssaid) {
     return res.status(400).json({ success: false, error: "SSAID is required" });
   }
 
-  // FIXED: Included 'username' in SELECT query
   const checkSql =
     "SELECT username, user_created_at, status FROM users WHERE ssaid = ?";
-
   db.query(checkSql, [ssaid], (err, results) => {
     if (err) {
       console.error(
@@ -79,7 +35,6 @@ app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
     }
 
     if (results.length > 0) {
-      // Returning User
       const existingUser = results[0];
       return res.json({
         success: true,
@@ -89,26 +44,23 @@ app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
         status: existingUser.status,
       });
     } else {
-      // New User Logic
       const uniqueId = crypto.randomBytes(2).toString("hex").toUpperCase();
       const baseName = username ? username.trim() : "Guest";
       const finalUsername = `${baseName}_${uniqueId}`;
-
       const insertSql =
         "INSERT INTO users (username, ssaid, user_created_at) VALUES (?, ?, ?)";
       const currentTime = getNepalDateTime();
 
-      db.query(insertSql, [finalUsername, ssaid, currentTime], (err) => {
-        if (err) {
+      db.query(insertSql, [finalUsername, ssaid, currentTime], (insertErr) => {
+        if (insertErr) {
           console.error(
-            `[ERROR] [POST] /api/register - Insert failed: ${err.message}`,
+            `[ERROR] [POST] /api/register - Insert failed: ${insertErr.message}`,
           );
           return res
             .status(500)
             .json({ success: false, error: "Failed to register device" });
         }
 
-        // Fetch newly created record to ensure consistent DB-generated timestamp format
         db.query(checkSql, [ssaid], (fetchErr, newResults) => {
           if (fetchErr || newResults.length === 0) {
             return res.status(201).json({
@@ -118,7 +70,6 @@ app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
               status: "trial",
             });
           }
-
           const newUser = newResults[0];
           res.status(201).json({
             success: true,
@@ -136,28 +87,19 @@ app.post("/api/register/:ssaid", verifyAppKey, (req, res) => {
 // GET USER PROFILE & UPDATE LAST CHECK IN
 app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
   const { ssaid } = req.params;
-
   if (!ssaid) {
     return res.status(400).json({ error: "SSAID parameter is required" });
   }
 
   const selectSql =
     "SELECT username, ssaid, user_created_at, status FROM users WHERE ssaid = ?";
-  // Pass explicit JavaScript timestamp parameter instead of SQL CURRENT_TIMESTAMP
   const updateSql =
     "UPDATE users SET last_check_in = ?, ping_count = ping_count + 1 WHERE ssaid = ?";
-
-  // !! TO BE DELETED Insert query to record individual check-in history
-  // const historySql =
-  //   "INSERT INTO check_ins (ssaid, username, check_in_at) VALUES (?, ?, ?)";
-
   const dailyPingSql = `
-  INSERT INTO daily_pings (ssaid, username, ping_date, ping_count)
-  VALUES (?, ?, ?, 1)
-  ON DUPLICATE KEY UPDATE 
-    ping_count = ping_count + 1,
-    username = VALUES(username);
-`;
+    INSERT INTO daily_pings (ssaid, username, ping_date, ping_count) 
+    VALUES (?, ?, ?, 1) 
+    ON DUPLICATE KEY UPDATE ping_count = ping_count + 1, username = VALUES(username);
+  `;
 
   db.query(selectSql, [ssaid], (err, results) => {
     if (err) {
@@ -178,8 +120,6 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
     }
 
     const userData = results[0];
-
-    // Send response first
     res.json({
       success: true,
       isRegistered: true,
@@ -188,8 +128,6 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
       status: userData.status,
     });
 
-    // Safely log background query errors
-    // 1. Update last_check_in using explicit JS time string
     const currentTime = getNepalDateTime();
     db.query(updateSql, [currentTime, ssaid], (updateErr) => {
       if (updateErr) {
@@ -198,20 +136,6 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
         );
       }
     });
-
-    // !! TO BE DELETED Insert query to record daily ping count
-    // 2. Insert new check-in timestamp record into history table
-    // db.query(
-    //   historySql,
-    //   [ssaid, userData.username, currentTime],
-    //   (historyErr) => {
-    //     if (historyErr) {
-    //       console.error(
-    //         `[BACKGROUND WARNING] [GET] /api/ping/${ssaid} - Failed to log check-in history: ${historyErr.message}`,
-    //       );
-    //     }
-    //   },
-    // );
 
     const pingDateOnly = currentTime.split(" ")[0];
     db.query(
@@ -226,6 +150,10 @@ app.get("/api/ping/:ssaid", verifyAppKey, (req, res) => {
       },
     );
   });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
 
 // ROOT ROUTE
